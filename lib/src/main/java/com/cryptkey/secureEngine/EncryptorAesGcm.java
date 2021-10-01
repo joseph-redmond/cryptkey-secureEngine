@@ -23,48 +23,46 @@ public class EncryptorAesGcm {
     private static final int IV_LENGTH_BYTE = 12;
     private static final int KEY_ITERATION_COUNT = 1000000;
     private static final int KEY_LENGTH_BIT = 256;
-    private char[] password;
-    
-    public EncryptorAesGcm(char[] password) {
+	private char[] password;
+	
+	public EncryptorAesGcm(char[] password) {
     	this.password = password;
     }
     
-    
-    public void setPassword(char[] password) {
-    	this.password = password;
+	private byte[] prefixEmbedIV(byte[] initVector, byte[] encryptedData) {
+    	byte[] encryptedDataWithIv = ByteBuffer.allocate(initVector.length + encryptedData.length)
+                .put(initVector)
+                .put(encryptedData)
+                .array();
+        return encryptedDataWithIv;
+    }
+
+	private static Cipher getSetupCipher(SecretKey key, byte[] initVector, int cryptMode) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException {
+    	Cipher cipher = Cipher.getInstance(CIPHER);
+    	cipher.init(cryptMode, key, new GCMParameterSpec(TAG_LENGTH_BIT, initVector));
+    	return cipher;
     }
     
+    private SecretKey getAESKeyFromPassword(byte[] initVector) throws NoSuchAlgorithmException, InvalidKeySpecException{
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        KeySpec spec = new PBEKeySpec(this.password, initVector, KEY_ITERATION_COUNT, KEY_LENGTH_BIT);
+        SecretKey secret = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), ALGORITHM);
+        ArrayWipeUtility.zeroOutCharArray(this.password);
+        return secret;
+    }
+
     protected static byte[] getRandomNonce(int numBytes){
         byte[] nonce = new byte[numBytes];
         new SecureRandom().nextBytes(nonce);
         return nonce;
     }
 
-    public static SecretKey getAESKey(int keySize) throws NoSuchAlgorithmException{
+    protected static SecretKey getAESKey(int keySize) throws NoSuchAlgorithmException{
         KeyGenerator keyGen = KeyGenerator.getInstance(ALGORITHM);
         keyGen.init(keySize, SecureRandom.getInstanceStrong());
         return keyGen.generateKey();
     }
-    
-    private void zeroOutPassword() {
-    	for(int i = 0; i < this.password.length; i++) {
-    		this.password[i] = '0';
-    	}
-    }
-    private void zeroOutByteArray(byte[] array) {
-    	for(int i = 0; i < array.length; i++) {
-    		array[i] = 0;
-    	}
-    }
-
-    private SecretKey getAESKeyFromPassword(byte[] initVector) throws NoSuchAlgorithmException, InvalidKeySpecException{
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec spec = new PBEKeySpec(this.password, initVector, KEY_ITERATION_COUNT, KEY_LENGTH_BIT);
-        SecretKey secret = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), ALGORITHM);
-        zeroOutPassword();
-        return secret;
-    }
-
+       
     public byte[] encryptData(byte[] dataToEncrypt) {
         try{
         	byte[] initVector = EncryptorAesGcm.getRandomNonce(IV_LENGTH_BYTE);
@@ -76,17 +74,31 @@ public class EncryptorAesGcm {
         }
         catch(Exception e){
             return null;
-        } finally {
-        	zeroOutByteArray(dataToEncrypt);
-        }
+        } 
     }
-    
-    public byte[] prefixEmbedIV(byte[] initVector, byte[] encryptedData) {
-    	byte[] encryptedDataWithIv = ByteBuffer.allocate(initVector.length + encryptedData.length)
-                .put(initVector)
-                .put(encryptedData)
-                .array();
-        return encryptedDataWithIv;
+
+    /**
+     * takes in a byte array of encryptedData and decrypts it.
+     * When decryption fails it returns null otherwise the decrypted
+     * data is returned
+     * @param encryptedData
+     * @return decryptedData or null
+     */
+    public byte[] decryptData(byte[] encryptedData){
+        try{
+        	byte[] data = getDataWithoutIV(encryptedData);
+        	byte[] initVector = getIV(encryptedData);
+        	SecretKey key = this.getAESKeyFromPassword(initVector);
+        	Cipher cipher = getSetupCipher(key, initVector, Cipher.DECRYPT_MODE);
+            return cipher.doFinal(data);
+        }
+        catch(Exception e){
+        	Throwable throwable = e.getCause();
+        	if(!throwable.equals(null)) {
+//        		log.Error(throwable.getMessage());
+        	}
+        }
+        return null;
     }
     
     public static byte[] getIV(byte[] encryptedData) {
@@ -104,26 +116,8 @@ public class EncryptorAesGcm {
         bb.get(encrypted);
         return encrypted;
     }
-    
-    private static Cipher setupCipher(SecretKey key, byte[] initVector, int cryptMode) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException {
-    	Cipher cipher = Cipher.getInstance(CIPHER);
-    	cipher.init(cryptMode, key, new GCMParameterSpec(TAG_LENGTH_BIT, initVector));
-    	return cipher;
-    }
 
-
-    public byte[] decryptData(byte[] encryptedData){
-        try{
-        	byte[] data = getDataWithoutIV(encryptedData);
-        	byte[] initVector = getIV(encryptedData);
-        	SecretKey key = this.getAESKeyFromPassword(initVector);
-        	Cipher cipher = setupCipher(key, initVector, Cipher.DECRYPT_MODE);
-            return cipher.doFinal(data);
-        }
-        catch(Exception e){
-            return null;
-        } finally {
-        	zeroOutByteArray(encryptedData);
-        }
+    public void setPassword(char[] password) {
+    	this.password = password;
     }
 }
