@@ -30,11 +30,11 @@ public class EncryptorAesGcm {
 		this.password = password;
 	}
 
-	private static Cipher getSetupCipher(SecretKey key, byte[] initVector, int cryptMode)
+	private static Cipher getSetupCipher(SecretKey key, byte[] initVector, int cryptModeConstant)
 			throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException,
 			InvalidAlgorithmParameterException {
 		Cipher cipher = Cipher.getInstance(CIPHER);
-		cipher.init(cryptMode, key, new GCMParameterSpec(TAG_LENGTH_BIT, initVector));
+		cipher.init(cryptModeConstant, key, new GCMParameterSpec(TAG_LENGTH_BIT, initVector));
 		return cipher;
 	}
 
@@ -67,15 +67,15 @@ public class EncryptorAesGcm {
 
 	public static byte[] getIV(byte[] encryptedData) {
 		ByteBuffer bb = ByteBuffer.wrap(encryptedData.clone());
-		byte[] iv = new byte[IV_LENGTH_BYTE];
-		bb.get(iv);
-		return iv;
+		byte[] initVector = new byte[IV_LENGTH_BYTE];
+		bb.get(initVector);
+		return initVector;
 	}
 
 	public static byte[] getDataWithoutIV(byte[] encryptedData) {
 		ByteBuffer bb = ByteBuffer.wrap(encryptedData.clone());
-		byte[] iv = new byte[IV_LENGTH_BYTE];
-		bb.get(iv);
+		byte[] initVector = new byte[IV_LENGTH_BYTE];
+		bb.get(initVector);
 		byte[] encrypted = new byte[bb.remaining()];
 		bb.get(encrypted);
 		return encrypted;
